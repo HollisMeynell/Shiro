@@ -1,14 +1,14 @@
 @file:Suppress("SpellCheckingInspection")
 
 group = "com.mikuac"
-version = "2.3.2"
+version = "2.3.3"
 
 plugins {
     signing
     `java-library`
     `maven-publish`
     id("io.freefair.lombok") version "8.10.2"
-    id("org.springframework.boot") version "3.3.4"
+    id("org.springframework.boot") version "3.3.5"
     id("io.spring.dependency-management") version "1.1.6"
 }
 
@@ -60,7 +60,7 @@ publishing {
                 description.set("基于OneBot协议的QQ机器人快速开发框架")
                 licenses {
                     license {
-                        name.set("GNU General Public License v3.0")
+                        name.set("GNU Affero General Public License v3.0")
                         url.set("https://github.com/MisakaTAT/Shiro/blob/main/LICENSE")
                     }
                 }
