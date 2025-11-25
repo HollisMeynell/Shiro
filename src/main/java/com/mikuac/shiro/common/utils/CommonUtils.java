@@ -37,11 +37,11 @@ public class CommonUtils {
         Optional<ArrayMsg> opt = Optional.ofNullable(atParse(arrayMsg, selfId));
         return switch (at) {
             case NEED -> opt.map(item -> {
-                long target = Long.parseLong(item.getData().get("qq"));
+                long target = item.getLongData("qq");
                 return target == 0L || target != selfId;
             }).orElse(true);
             case NOT_NEED -> opt.map(item -> {
-                long target = Long.parseLong(item.getData().get("qq"));
+                long target = item.getLongData("qq");
                 return target == selfId;
             }).orElse(false);
             default -> false;
@@ -85,11 +85,11 @@ public class CommonUtils {
         if (!filter.reply().equals(ReplyEnum.OFF)) {
             Optional<ArrayMsg> reply = event.getArrayMsg().stream().filter(e -> e.getType() == MsgTypeEnum.reply).findFirst();
             boolean flag = switch (filter.reply()) {
-                case OFF -> throw new ShiroException("exception that cannot be thrown");
+                case OFF -> throw new ShiroException("Exception that cannot be thrown");
                 case NONE -> reply.isEmpty();
                 case REPLY_ALL -> reply.isPresent();
-                case REPLY_ME -> reply.map(e -> e.getData().get("qq").equals(String.valueOf(selfId))).orElse(false);
-                case REPLY_OTHER -> reply.map(e -> !e.getData().get("qq").equals(String.valueOf(selfId))).orElse(false);
+                case REPLY_ME -> reply.map(e -> e.getLongData("qq") == selfId).orElse(false);
+                case REPLY_OTHER -> reply.map(e -> e.getLongData("qq") != selfId).orElse(false);
             };
             if (!flag) return new CheckResult();
         }
@@ -169,7 +169,7 @@ public class CommonUtils {
         }
         ArrayMsg item = atParse(arrayMsg, selfId);
         if (item != null) {
-            String code = ShiroUtils.arrayMsgToCode(arrayMsg.get(arrayMsg.indexOf(item)));
+            String code = arrayMsg.get(arrayMsg.indexOf(item)).toCQCode();
             return msg.replace(code, "").trim();
         }
         return msg;
@@ -181,28 +181,18 @@ public class CommonUtils {
      * @return {@link ArrayMsg}
      */
     public static ArrayMsg atParse(List<ArrayMsg> arrayMsg, long selfId) {
-        if (arrayMsg.isEmpty()) {
+        if (arrayMsg == null || arrayMsg.isEmpty()) {
             return null;
         }
-        int index = 0;
-        ArrayMsg item = arrayMsg.get(index);
-        String rawTarget = item.getData().getOrDefault("qq", "0");
-        long target = Long.parseLong(CommonEnum.AT_ALL.value().equals(rawTarget) ? "0" : rawTarget);
-        index = arrayMsg.size() - 1;
-        if ((target == 0L || target != selfId) && index >= 0) {
-            item = arrayMsg.get(index);
-            // @ 右侧可能会有空格
-            index = arrayMsg.size() - 2;
-            if (MsgTypeEnum.text == item.getType() && index >= 0) {
-                item = arrayMsg.get(index);
-            }
-            rawTarget = item.getData().getOrDefault("qq", "0");
-            target = Long.parseLong(CommonEnum.AT_ALL.value().equals(rawTarget) ? "0" : rawTarget);
-            if (target == 0L || target != selfId) {
-                return null;
+        for (ArrayMsg item : arrayMsg) {
+            if (item.getType() == MsgTypeEnum.at) {
+                long target = item.getLongData("qq");
+                if (target == selfId) {
+                    return item;
+                }
             }
         }
-        return item;
+        return null;
     }
 
     /**

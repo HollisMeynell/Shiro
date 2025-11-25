@@ -1,6 +1,7 @@
 package com.mikuac.shiro.action;
 
 import com.mikuac.shiro.dto.action.common.ActionData;
+import com.mikuac.shiro.dto.action.common.ActionRaw;
 import com.mikuac.shiro.dto.action.response.GetMsgListResp;
 
 public interface NapCatExtend {
@@ -27,4 +28,19 @@ public interface NapCatExtend {
      */
     ActionData<GetMsgListResp> getFriendMsgHistory(long userId, Long messageSeq, int count, boolean reverseOrder);
 
+    ActionRaw sendGroupPoke(long groupId, long userId);
+
+    ActionRaw sendFriendPoke(long userId);
+
+    ActionRaw sendFriendPoke(long userId, long targetId);
+
+    /**
+     * 设置消息表情回应(贴表情)
+     *
+     * @param msgId 消息 ID
+     * @param code  表情 ID
+     * @param isSet 添加/取消 回应
+     * @return result {@link ActionRaw}
+     */
+    ActionRaw setMsgEmojiLike(int msgId, String code, boolean isSet);
 }

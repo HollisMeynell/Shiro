@@ -1,6 +1,5 @@
 package com.mikuac.shiro.common.utils;
 
-import com.alibaba.fastjson2.JSONObject;
 import com.mikuac.shiro.core.Bot;
 import com.mikuac.shiro.core.BotMessageEventInterceptor;
 import com.mikuac.shiro.core.BotPlugin;
@@ -86,22 +85,25 @@ public class EventUtils {
      * 推送消息
      *
      * @param bot      {@link Bot}
-     * @param resp     {@link JSONObject}
+     * @param resp     {@link JsonObjectWrapper}
      * @param arrayMsg {@link ArrayMsg}
+     * @return 是否中断向下执行
      */
-    public void pushAnyMessageEvent(Bot bot, JSONObject resp, List<ArrayMsg> arrayMsg) {
+    public boolean pushAnyMessageEvent(Bot bot, JsonObjectWrapper resp, List<ArrayMsg> arrayMsg) {
         try {
             AnyMessageEvent event = resp.to(AnyMessageEvent.class);
             event.setArrayMsg(arrayMsg);
-            injection.invokeAnyMessage(bot, event);
+            boolean messageBlocked = injection.invokeAnyMessage(bot, event);
+            if (messageBlocked) return true;
             for (Class<? extends BotPlugin> pluginClass : bot.getPluginList()) {
                 if (getPlugin(pluginClass).onAnyMessage(bot, event) == BotPlugin.MESSAGE_BLOCK) {
-                    break;
+                    return true;
                 }
             }
         } catch (Exception e) {
             log.error("An exception occurred while pushing the message event: {}", e.getMessage(), e);
         }
+        return false;
     }
 
 }

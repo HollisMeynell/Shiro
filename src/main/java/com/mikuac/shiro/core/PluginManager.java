@@ -91,7 +91,7 @@ public class PluginManager {
             Manifest manifest = jar.getManifest();
             if (manifest != null) {
                 String deps = manifest.getMainAttributes().getValue("Dependencies");
-                if (deps != null) {
+                if (deps != null && !deps.isEmpty()) {
                     dependencies.addAll(Arrays.asList(deps.split(",\\s*")));
                 }
             }
@@ -114,12 +114,18 @@ public class PluginManager {
 
     // 检查依赖是否已存在
     private boolean isDependencyMissing(String groupArtifact) {
-        String[] parts = groupArtifact.split(":");
         try {
-            // 尝试加载依赖中的典型类
-            Class.forName(parts[0].replace('.', '/') + "/" + parts[1] + "/Application");
-            return false;
-        } catch (ClassNotFoundException e) {
+            String[] parts = groupArtifact.split(":", 3);
+            String group = parts[0];
+            String artifact = parts[1];
+            String version = parts[2];
+            Path jarPath = DependencyResolver.DEPENDENCIES_DIR.toPath()
+                    .resolve(group.replace('.', '/'))
+                    .resolve(artifact)
+                    .resolve(version)
+                    .resolve("%s-%s.jar".formatted(artifact, version));
+            return !jarPath.toFile().exists();
+        } catch (Exception e) {
             return true;
         }
     }
@@ -159,42 +165,7 @@ public class PluginManager {
 
     private URLClassLoader createPluginClassLoader(List<URL> urls) {
         final ClassLoader parentLoader = Thread.currentThread().getContextClassLoader();
-
-        // 定义禁止插件加载的包前缀
-        final Set<String> forbiddenPackages = Set.of(
-                "ch.qos.logback.",
-                "org.slf4j.",
-                "org.apache.logging."
-        );
-
-        return new URLClassLoader(urls.toArray(new URL[0]), parentLoader) {
-            @Override
-            public Class<?> loadClass(String name) throws ClassNotFoundException {
-                // 禁止加载核心日志库
-                for (String pkg : forbiddenPackages) {
-                    if (name.startsWith(pkg)) {
-                        return parentLoader.loadClass(name);
-                    }
-                }
-
-                // 优先加载插件类
-                try {
-                    return findClass(name);
-                } catch (ClassNotFoundException e) {
-                    return super.loadClass(name);
-                }
-            }
-
-            @Override
-            public URL getResource(String name) {
-
-                URL url;
-                url = parentLoader.getResource(name);// 优先从父级加载
-                if (url == null) url = findResource(name);// 父级没有从插件自身查找
-                if (url == null) url = super.getResource(name);
-                return url;
-            }
-        };
+        return new URLClassLoader(urls.toArray(new URL[0]), parentLoader);
     }
 
     private void registerPlugins(URLClassLoader classLoader) {

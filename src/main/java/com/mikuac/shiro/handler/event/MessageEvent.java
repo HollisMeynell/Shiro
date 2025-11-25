@@ -1,9 +1,8 @@
 package com.mikuac.shiro.handler.event;
 
-import com.alibaba.fastjson2.JSONObject;
 import com.mikuac.shiro.common.utils.EventUtils;
 import com.mikuac.shiro.common.utils.GroupMessageFilterUtils;
-import com.mikuac.shiro.common.utils.ShiroUtils;
+import com.mikuac.shiro.common.utils.JsonObjectWrapper;
 import com.mikuac.shiro.core.Bot;
 import com.mikuac.shiro.core.BotContainer;
 import com.mikuac.shiro.core.BotPlugin;
@@ -46,15 +45,15 @@ public class MessageEvent {
     /**
      * 存储消息事件处理器
      */
-    public final Map<String, BiConsumer<Bot, JSONObject>> handlers = new HashMap<>();
+    public final Map<String, BiConsumer<Bot, JsonObjectWrapper>> handlers = new HashMap<>();
 
     /**
      * 消息事件分发
      *
      * @param bot  {@link Bot}
-     * @param resp {@link JSONObject}
+     * @param resp {@link JsonObjectWrapper}
      */
-    public void handler(Bot bot, JSONObject resp) {
+    public void handler(Bot bot, JsonObjectWrapper resp) {
         String type = resp.getString("message_type");
         handlers.getOrDefault(type, (b, e) -> {
         }).accept(bot, resp);
@@ -64,22 +63,25 @@ public class MessageEvent {
      * 事件处理
      *
      * @param bot  {@link Bot}
-     * @param resp {@link JSONObject}
+     * @param resp {@link JsonObjectWrapper}
      * @param type {@link MessageEventEnum}
      */
     @SuppressWarnings({"ResultOfMethodCallIgnored", "squid:S2201", "squid:S3776"})
-    private void process(Bot bot, JSONObject resp, MessageEventEnum type) {
+    private void process(Bot bot, JsonObjectWrapper resp, MessageEventEnum type) {
         try {
             if (type == MessageEventEnum.FRIEND) {
                 PrivateMessageEvent event = resp.to(PrivateMessageEvent.class);
                 if (utils.setInterceptor(bot, event)) {
                     return;
                 }
-                ShiroUtils.rawConvert(event.getMessage(), event);
                 resp.put("message", event.getMessage());
-                utils.pushAnyMessageEvent(bot, resp, event.getArrayMsg());
-                injection.invokePrivateMessage(bot, event);
-                bot.getPluginList().stream().anyMatch(o -> utils.getPlugin(o).onPrivateMessage(bot, event) == BotPlugin.MESSAGE_BLOCK);
+                boolean messageBlocked = utils.pushAnyMessageEvent(bot, resp, event.getArrayMsg());
+                if (!messageBlocked) {
+                    messageBlocked = injection.invokePrivateMessage(bot, event);
+                }
+                if (!messageBlocked) {
+                    bot.getPluginList().stream().anyMatch(o -> utils.getPlugin(o).onPrivateMessage(bot, event) == BotPlugin.MESSAGE_BLOCK);
+                }
                 utils.getInterceptor(bot.getBotMessageEventInterceptor()).afterCompletion(bot, event);
             }
 
@@ -98,11 +100,14 @@ public class MessageEvent {
                 if (utils.setInterceptor(bot, event)) {
                     return;
                 }
-                ShiroUtils.rawConvert(event.getMessage(), event);
                 resp.put("message", event.getMessage());
-                utils.pushAnyMessageEvent(bot, resp, event.getArrayMsg());
-                injection.invokeGroupMessage(bot, event);
-                bot.getPluginList().stream().anyMatch(o -> utils.getPlugin(o).onGroupMessage(bot, event) == BotPlugin.MESSAGE_BLOCK);
+                boolean messageBlocked = utils.pushAnyMessageEvent(bot, resp, event.getArrayMsg());
+                if (!messageBlocked) {
+                    messageBlocked = injection.invokeGroupMessage(bot, event);
+                }
+                if (!messageBlocked) {
+                    bot.getPluginList().stream().anyMatch(o -> utils.getPlugin(o).onGroupMessage(bot, event) == BotPlugin.MESSAGE_BLOCK);
+                }
                 utils.getInterceptor(bot.getBotMessageEventInterceptor()).afterCompletion(bot, event);
             }
 
@@ -111,9 +116,10 @@ public class MessageEvent {
                 if (utils.setInterceptor(bot, event)) {
                     return;
                 }
-                ShiroUtils.rawConvert(event.getMessage(), event);
-                injection.invokeGuildMessage(bot, event);
-                bot.getPluginList().stream().anyMatch(o -> utils.getPlugin(o).onGuildMessage(bot, event) == BotPlugin.MESSAGE_BLOCK);
+                boolean messageBlocked = injection.invokeGuildMessage(bot, event);
+                if (!messageBlocked) {
+                    bot.getPluginList().stream().anyMatch(o -> utils.getPlugin(o).onGuildMessage(bot, event) == BotPlugin.MESSAGE_BLOCK);
+                }
                 utils.getInterceptor(bot.getBotMessageEventInterceptor()).afterCompletion(bot, event);
             }
         } catch (Exception e) {
@@ -125,9 +131,9 @@ public class MessageEvent {
      * 私聊请求
      *
      * @param bot  {@link Bot}
-     * @param resp {@link JSONObject}
+     * @param resp {@link JsonObjectWrapper}
      */
-    public void friend(Bot bot, JSONObject resp) {
+    public void friend(Bot bot, JsonObjectWrapper resp) {
         process(bot, resp, MessageEventEnum.FRIEND);
     }
 
@@ -135,9 +141,9 @@ public class MessageEvent {
      * 群消息
      *
      * @param bot  {@link Bot}
-     * @param resp {@link JSONObject}
+     * @param resp {@link JsonObjectWrapper}
      */
-    public void group(Bot bot, JSONObject resp) {
+    public void group(Bot bot, JsonObjectWrapper resp) {
         process(bot, resp, MessageEventEnum.GROUP);
     }
 
@@ -145,9 +151,9 @@ public class MessageEvent {
      * 频道消息
      *
      * @param bot  {@link Bot}
-     * @param resp {@link JSONObject}
+     * @param resp {@link JsonObjectWrapper}
      */
-    public void guild(Bot bot, JSONObject resp) {
+    public void guild(Bot bot, JsonObjectWrapper resp) {
         process(bot, resp, MessageEventEnum.GUILD);
     }
 

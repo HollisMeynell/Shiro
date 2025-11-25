@@ -7,6 +7,8 @@ public class ActionParams {
 
     public static final String USER_ID = "user_id";
 
+    public static final String TARGET_ID = "target_id";
+
     public static final String MESSAGE = "message";
 
     public static final String AUTO_ESCAPE = "auto_escape";
@@ -112,4 +114,8 @@ public class ActionParams {
     public static final String SUMMARY = "summary";
 
     public static final String SOURCE = "source";
+
+    public static final String EMOJI_ID = "emoji_id";
+
+    public static final String SET = "set";
 }

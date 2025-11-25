@@ -5,6 +5,7 @@ import com.mikuac.shiro.common.utils.CheckResult;
 import com.mikuac.shiro.common.utils.CommonUtils;
 import com.mikuac.shiro.common.utils.InternalUtils;
 import com.mikuac.shiro.core.Bot;
+import com.mikuac.shiro.core.BotPlugin;
 import com.mikuac.shiro.dto.event.message.*;
 import com.mikuac.shiro.dto.event.meta.HeartbeatMetaEvent;
 import com.mikuac.shiro.dto.event.meta.LifecycleMetaEvent;
@@ -39,17 +40,19 @@ public class InjectionHandler {
      * @param method The handler method to invoke
      * @param params Map of available parameters for injection
      */
-    private void invokeMethod(HandlerMethod method, Map<Class<?>, Object> params) {
+    private Object invokeMethod(HandlerMethod method, Map<Class<?>, Object> params) {
         Class<?>[] paramTypes = method.getMethod().getParameterTypes();
         Object[] args = new Object[paramTypes.length];
         Arrays.stream(paramTypes).forEach(InternalUtils.consumerWithIndex((paramType, index) -> args[index] = params.get(paramType)));
+        Object invokeResult = null;
         try {
-            method.getMethod().invoke(method.getObject(), args);
+            invokeResult = method.getMethod().invoke(method.getObject(), args);
         } catch (Exception e) {
             String methodName = method.getMethod().getDeclaringClass().getSimpleName()
                     + "#" + method.getMethod().getName();
             log.error("Invoke method exception on [{}]: {}", methodName, e.getMessage(), e);
         }
+        return invokeResult;
     }
 
     private <T> void invoke(Bot bot, T event, Class<? extends Annotation> type) {
@@ -60,10 +63,12 @@ public class InjectionHandler {
         Map<Class<?>, Object> params = new HashMap<>();
         params.put(Bot.class, bot);
         params.put(event.getClass(), event);
-        methods.get().forEach(method -> invokeMethod(method, params));
+        for (HandlerMethod method : methods.get()) {
+            if (isBlockingResult(invokeMethod(method, params))) break;
+        }
     }
 
-    private <T> void invoke(Bot bot, T event, HandlerMethod method, Matcher matcher) {
+    private <T> Object invoke(Bot bot, T event, HandlerMethod method, Matcher matcher) {
         Map<Class<?>, Object> params = new HashMap<>();
         // 此处逻辑修改，因为如果包含 cmd 但是校验未通过，在之前就被拦截掉了，所以到达此处若 matcher 为空则说明 cmd 参数未填写，不影响参数传递。
         if (matcher != null) {
@@ -71,7 +76,7 @@ public class InjectionHandler {
         }
         params.put(Bot.class, bot);
         params.put(event.getClass(), event);
-        invokeMethod(method, params);
+        return invokeMethod(method, params);
     }
 
     /**
@@ -205,14 +210,25 @@ public class InjectionHandler {
     }
 
     /**
+     * 消息表情回应事件
+     *
+     * @param bot   {@link Bot}
+     * @param event {@link MessageEmojiLikeNoticeEvent}
+     */
+    public void invokeMessageEmojiLikeNotice(Bot bot, MessageEmojiLikeNoticeEvent event) {
+        invoke(bot, event, MessageEmojiLikeNoticeHandler.class);
+    }
+
+    /**
      * 监听全部消息
      *
      * @param bot   {@link Bot}
      * @param event {@link AnyMessageEvent}
+     * @return 是否中断向下执行
      */
-    public void invokeAnyMessage(Bot bot, AnyMessageEvent event) {
+    public boolean invokeAnyMessage(Bot bot, AnyMessageEvent event) {
         Optional<List<HandlerMethod>> methods = Optional.ofNullable(bot.getAnnotationHandler().get(AnyMessageHandler.class));
-        invokeMessage(bot, event, methods);
+        return invokeMessage(bot, event, methods);
     }
 
     /**
@@ -220,10 +236,11 @@ public class InjectionHandler {
      *
      * @param bot   {@link Bot}
      * @param event {@link GuildMessageEvent}
+     * @return 是否中断向下执行
      */
-    public void invokeGuildMessage(Bot bot, GuildMessageEvent event) {
+    public boolean invokeGuildMessage(Bot bot, GuildMessageEvent event) {
         Optional<List<HandlerMethod>> methods = Optional.ofNullable(bot.getAnnotationHandler().get(GuildMessageHandler.class));
-        invokeMessage(bot, event, methods);
+        return invokeMessage(bot, event, methods);
     }
 
     /**
@@ -231,10 +248,11 @@ public class InjectionHandler {
      *
      * @param bot   {@link Bot}
      * @param event {@link GroupMessageEvent}
+     * @return 是否中断向下执行
      */
-    public void invokeGroupMessage(Bot bot, GroupMessageEvent event) {
+    public boolean invokeGroupMessage(Bot bot, GroupMessageEvent event) {
         Optional<List<HandlerMethod>> methods = Optional.ofNullable(bot.getAnnotationHandler().get(GroupMessageHandler.class));
-        invokeMessage(bot, event, methods);
+        return invokeMessage(bot, event, methods);
     }
 
     /**
@@ -242,10 +260,11 @@ public class InjectionHandler {
      *
      * @param bot   {@link Bot}
      * @param event {@link PrivateMessageEvent}
+     * @return 是否中断向下执行
      */
-    public void invokePrivateMessage(Bot bot, PrivateMessageEvent event) {
+    public boolean invokePrivateMessage(Bot bot, PrivateMessageEvent event) {
         Optional<List<HandlerMethod>> methods = Optional.ofNullable(bot.getAnnotationHandler().get(PrivateMessageHandler.class));
-        invokeMessage(bot, event, methods);
+        return invokeMessage(bot, event, methods);
     }
 
     /**
@@ -254,21 +273,25 @@ public class InjectionHandler {
      * @param bot            {@link Bot}
      * @param event          {@link MessageEvent}
      * @param handlerMethods 消息处理方法
+     * @return 是否中断向下执行
      */
     @SuppressWarnings("squid:S1121")
-    public void invokeMessage(Bot bot, MessageEvent event, Optional<List<HandlerMethod>> handlerMethods) {
+    public boolean invokeMessage(Bot bot, MessageEvent event, Optional<List<HandlerMethod>> handlerMethods) {
         if (handlerMethods.isEmpty()) {
-            return;
+            return false;
         }
-        handlerMethods.get().forEach(method -> {
+        for (HandlerMethod method : handlerMethods.get()) {
             MessageHandlerFilter filter = method.getMethod().getAnnotation(MessageHandlerFilter.class);
             CheckResult result;
+            Object invokeResult = null;
             if (Objects.isNull(filter)) {
-                invoke(bot, event, method, null);
+                invokeResult = invoke(bot, event, method, null);
             } else if ((result = CommonUtils.allFilterCheck(event, bot.getSelfId(), filter)).isResult()) {
-                invoke(bot, event, method, result.getMatcher());
+                invokeResult = invoke(bot, event, method, result.getMatcher());
             }
-        });
+            if (isBlockingResult(invokeResult)) return true;
+        }
+        return false;
     }
 
     /**
@@ -343,6 +366,15 @@ public class InjectionHandler {
 
             invokeMethod(method, params);
         });
+    }
+
+    /**
+     * 判断是否为阻塞结果
+     */
+    private boolean isBlockingResult(Object result) {
+        if (result == null) return false;
+        if (result instanceof Boolean && Boolean.TRUE.equals(result)) return true;
+        return result.equals(BotPlugin.MESSAGE_BLOCK);
     }
 
 }
